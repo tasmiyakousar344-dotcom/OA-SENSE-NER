@@ -457,7 +457,7 @@ elif page == "🤖 ML Prediction":
 
 # ============================================================
 # X-RAY ANALYSIS
-#elif page == "🩻 X-ray Analysis":
+elif page == "🩻 X-ray Analysis":
 
     st.header(
         "X-ray Analysis"
