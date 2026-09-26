@@ -65,7 +65,7 @@ def get_hardware_data():
 
         url = (
             f"https://api.thingspeak.com/channels/"
-            f"{THINGSPEAK_CHANNEL_ID}/feeds/last.json"
+            f"{3502394}/feeds/last.json"
         )
 
 
