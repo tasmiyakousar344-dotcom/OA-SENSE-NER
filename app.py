@@ -1721,7 +1721,7 @@ speech.pitch = 1.0;
 speech.onend = function() {{
     statusBox.innerHTML =
         "✅ Response generated and spoken.";
-};
+}};
 
 window.speechSynthesis.speak(speech);
     }};
