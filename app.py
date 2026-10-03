@@ -1066,45 +1066,46 @@ elif page == "📊 Analytics":
         st.write(
             "• Field 6 → Buzzer"
         )
+        
 elif page == "🎤 Voice Assistant":
-    st.header("🎤 Voice Assistant")
-    st.write("Speak with OA-SENSE NER using your preferred language.")
 
-    st.markdown("""
-    <style>
-    .voice-box {
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #dddddd;
-        margin-bottom: 15px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    st.header("🎤 OA-SENSE NER Voice Assistant")
+    st.caption("Ask OA-SENSE NER questions using your voice.")
 
-    language = st.selectbox(
-        "🌐 Select Language",
-        [
-            "English",
-            "Kannada",
-            "Hindi",
-            "Tamil",
-            "Telugu",
-            "Malayalam",
-            "Marathi",
-            "Bengali",
-            "Gujarati",
-            "Punjabi",
-            "Urdu",
-            "Spanish",
-            "French",
-            "German",
-            "Arabic",
-            "Chinese",
-            "Japanese"
-        ]
-    )
+    import streamlit.components.v1 as components
+    import json
 
-    language_codes = {
+    # ---------------------------------------------------------
+    # CURRENT OA-SENSE NER DATA
+    # ---------------------------------------------------------
+    try:
+        voice_data = get_hardware_data()
+
+        if voice_data:
+            current_angle = float(voice_data.get("angle", 0))
+            current_fsr1 = float(voice_data.get("fsr1", 0))
+            current_fsr2 = float(voice_data.get("fsr2", 0))
+            current_total = float(voice_data.get("total_load", 0))
+            current_status = str(voice_data.get("status", "NORMAL"))
+        else:
+            current_angle = 0
+            current_fsr1 = 0
+            current_fsr2 = 0
+            current_total = 0
+            current_status = "NO DATA"
+
+    except Exception:
+        current_angle = 0
+        current_fsr1 = 0
+        current_fsr2 = 0
+        current_total = 0
+        current_status = "NO DATA"
+
+
+    # ---------------------------------------------------------
+    # LANGUAGE SETTINGS
+    # ---------------------------------------------------------
+    languages = {
         "English": "en-IN",
         "Kannada": "kn-IN",
         "Hindi": "hi-IN",
@@ -1124,132 +1125,729 @@ elif page == "🎤 Voice Assistant":
         "Japanese": "ja-JP"
     }
 
-    lang_code = language_codes[language]
+    selected_language = st.selectbox(
+        "🌐 Select Voice Language",
+        list(languages.keys()),
+        index=0
+    )
 
-    import streamlit.components.v1 as components
+    selected_language_code = languages[selected_language]
 
+
+    # ---------------------------------------------------------
+    # OA-SENSE NER INFORMATION FOR VOICE RESPONSE
+    # ---------------------------------------------------------
+    voice_info = {
+        "angle": current_angle,
+        "fsr1": current_fsr1,
+        "fsr2": current_fsr2,
+        "total": current_total,
+        "status": current_status
+    }
+
+    voice_info_json = json.dumps(voice_info)
+
+
+    # ---------------------------------------------------------
+    # MOBILE-FRIENDLY VOICE ASSISTANT
+    # ---------------------------------------------------------
     voice_html = f"""
-    <div class="voice-box">
-        <h3>🎤 Voice Recognition</h3>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport"
+          content="width=device-width,
+                   initial-scale=1.0,
+                   maximum-scale=1.0">
 
-        <button id="startBtn"
-                style="
-                padding:12px 20px;
-                border:none;
-                border-radius:10px;
-                background:#4CAF50;
-                color:white;
-                font-size:16px;
-                cursor:pointer;">
-            🎤 Start Speaking
-        </button>
+    <style>
 
-        <button id="stopBtn"
-                style="
-                padding:12px 20px;
-                border:none;
-                border-radius:10px;
-                background:#f44336;
-                color:white;
-                font-size:16px;
-                cursor:pointer;">
-            ⏹ Stop
-        </button>
+    * {{
+        box-sizing: border-box;
+    }}
 
-        <p><b>Language:</b> {language}</p>
+    body {{
+        margin: 0;
+        padding: 8px;
+        font-family: Arial, sans-serif;
+        background: transparent;
+    }}
 
-        <textarea id="result"
-                  rows="5"
-                  style="
-                  width:100%;
-                  padding:10px;
-                  font-size:16px;"
-                  placeholder="Your speech will appear here..."></textarea>
+    .voice-container {{
+        width: 100%;
+        max-width: 700px;
+        margin: auto;
+    }}
 
-        <p id="status">Ready to listen.</p>
+    .voice-card {{
+        width: 100%;
+        padding: 18px;
+        border-radius: 18px;
+        background: #ffffff;
+        border: 1px solid #dddddd;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.08);
+    }}
+
+    .title {{
+        font-size: 22px;
+        font-weight: bold;
+        margin-bottom: 6px;
+    }}
+
+    .subtitle {{
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 18px;
+    }}
+
+    .language-label {{
+        font-weight: bold;
+        margin-bottom: 6px;
+        display: block;
+    }}
+
+    select {{
+        width: 100%;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid #cccccc;
+        font-size: 16px;
+        background: white;
+        margin-bottom: 15px;
+    }}
+
+    .button-row {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+    }}
+
+    button {{
+        border: none;
+        border-radius: 12px;
+        padding: 13px 8px;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+        min-height: 48px;
+    }}
+
+    #startBtn {{
+        background: #4caf50;
+        color: white;
+    }}
+
+    #stopBtn {{
+        background: #f44336;
+        color: white;
+    }}
+
+    #speakBtn {{
+        background: #2196f3;
+        color: white;
+    }}
+
+    #clearBtn {{
+        background: #777;
+        color: white;
+    }}
+
+    #copyBtn {{
+        background: #673ab7;
+        color: white;
+    }}
+
+    textarea {{
+        width: 100%;
+        min-height: 130px;
+        resize: vertical;
+        border: 1px solid #cccccc;
+        border-radius: 12px;
+        padding: 13px;
+        font-size: 16px;
+        line-height: 1.5;
+        outline: none;
+        margin-bottom: 10px;
+    }}
+
+    textarea:focus {{
+        border: 2px solid #2196f3;
+    }}
+
+    .status {{
+        padding: 12px;
+        border-radius: 10px;
+        background: #f5f5f5;
+        font-size: 14px;
+        margin-top: 8px;
+    }}
+
+    .response {{
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 12px;
+        background: #eef7ff;
+        border-left: 4px solid #2196f3;
+        font-size: 15px;
+        line-height: 1.5;
+    }}
+
+    @media (max-width: 480px) {{
+
+        body {{
+            padding: 3px;
+        }}
+
+        .voice-card {{
+            padding: 13px;
+            border-radius: 14px;
+        }}
+
+        .title {{
+            font-size: 19px;
+        }}
+
+        .button-row {{
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }}
+
+        button {{
+            font-size: 14px;
+            padding: 11px 5px;
+        }}
+
+        textarea {{
+            min-height: 120px;
+            font-size: 15px;
+        }}
+    }}
+
+    </style>
+    </head>
+
+    <body>
+
+    <div class="voice-container">
+
+        <div class="voice-card">
+
+            <div class="title">
+                🎤 OA-SENSE NER Voice Assistant
+            </div>
+
+            <div class="subtitle">
+                Ask questions about your OA-SENSE NER screening.
+            </div>
+
+            <label class="language-label">
+                🌐 Voice Language
+            </label>
+
+            <select id="languageSelect">
+
+                <option value="en-IN">English</option>
+                <option value="kn-IN">Kannada</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="ta-IN">Tamil</option>
+                <option value="te-IN">Telugu</option>
+                <option value="ml-IN">Malayalam</option>
+                <option value="mr-IN">Marathi</option>
+                <option value="bn-IN">Bengali</option>
+                <option value="gu-IN">Gujarati</option>
+                <option value="pa-IN">Punjabi</option>
+                <option value="ur-IN">Urdu</option>
+                <option value="es-ES">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="ar-SA">Arabic</option>
+                <option value="zh-CN">Chinese</option>
+                <option value="ja-JP">Japanese</option>
+
+            </select>
+
+
+            <div class="button-row">
+
+                <button id="startBtn">
+                    🎤 Start Voice
+                </button>
+
+                <button id="stopBtn">
+                    ⏹ Stop Voice
+                </button>
+
+            </div>
+
+
+            <textarea
+                id="questionBox"
+                placeholder="Speak or type your question here...">
+            </textarea>
+
+
+            <div class="button-row">
+
+                <button id="answerBtn"
+                        style="background:#009688;color:white;">
+                    🤖 Get OA-SENSE Response
+                </button>
+
+                <button id="speakBtn">
+                    🔊 Speak Response
+                </button>
+
+            </div>
+
+
+            <div class="button-row">
+
+                <button id="copyBtn">
+                    📋 Copy Text
+                </button>
+
+                <button id="clearBtn">
+                    🧹 Clear
+                </button>
+
+            </div>
+
+
+            <div class="status" id="status">
+                🟢 Ready to listen.
+            </div>
+
+
+            <div class="response" id="responseBox">
+                OA-SENSE NER response will appear here.
+            </div>
+
+        </div>
+
     </div>
 
+
     <script>
-        const SpeechRecognition =
-            window.SpeechRecognition ||
-            window.webkitSpeechRecognition;
 
-        const result = document.getElementById("result");
-        const status = document.getElementById("status");
-        const startBtn = document.getElementById("startBtn");
-        const stopBtn = document.getElementById("stopBtn");
+    const SpeechRecognition =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition;
 
-        if (!SpeechRecognition) {{
-            status.innerHTML =
-                "❌ Voice recognition is not supported in this browser.";
-            startBtn.disabled = true;
-        }} else {{
+    const questionBox =
+        document.getElementById("questionBox");
 
-            const recognition = new SpeechRecognition();
+    const responseBox =
+        document.getElementById("responseBox");
 
-            recognition.lang = "{lang_code}";
-            recognition.continuous = true;
-            recognition.interimResults = true;
+    const statusBox =
+        document.getElementById("status");
 
-            recognition.onstart = function() {{
-                status.innerHTML = "🟢 Listening...";
-            }};
+    const startBtn =
+        document.getElementById("startBtn");
 
-            recognition.onresult = function(event) {{
+    const stopBtn =
+        document.getElementById("stopBtn");
 
-                let finalText = "";
-                let interimText = "";
+    const answerBtn =
+        document.getElementById("answerBtn");
 
-                for (
-                    let i = event.resultIndex;
-                    i < event.results.length;
-                    i++
-                ) {{
-                    const transcript =
-                        event.results[i][0].transcript;
+    const speakBtn =
+        document.getElementById("speakBtn");
 
-                    if (event.results[i].isFinal) {{
-                        finalText += transcript + " ";
-                    }} else {{
-                        interimText += transcript;
-                    }}
-                }}
+    const copyBtn =
+        document.getElementById("copyBtn");
 
-                if (finalText) {{
-                    result.value += finalText;
-                }}
+    const clearBtn =
+        document.getElementById("clearBtn");
 
-                if (interimText) {{
-                    status.innerHTML =
-                        "🗣️ " + interimText;
-                }}
-            }};
+    const languageSelect =
+        document.getElementById("languageSelect");
 
-            recognition.onerror = function(event) {{
-                status.innerHTML =
-                    "⚠️ Error: " + event.error;
-            }};
 
-            recognition.onend = function() {{
-                status.innerHTML = "⏹ Voice recognition stopped.";
-            }};
+    const sensorData =
+        {voice_info_json};
 
-            startBtn.onclick = function() {{
-                recognition.start();
-            }};
 
-            stopBtn.onclick = function() {{
-                recognition.stop();
-            }};
+    let recognition = null;
+
+
+    // -------------------------------------------------------
+    // VOICE RECOGNITION
+    // -------------------------------------------------------
+
+    if (SpeechRecognition) {{
+
+        recognition = new SpeechRecognition();
+
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        recognition.onstart = function() {{
+            statusBox.innerHTML =
+                "🟢 Listening... Speak now.";
+        }};
+
+
+        recognition.onresult = function(event) {{
+
+            let text = "";
+
+            for (
+                let i = event.resultIndex;
+                i < event.results.length;
+                i++
+            ) {{
+
+                text += event.results[i][0].transcript;
+            }}
+
+            questionBox.value = text;
+
+            statusBox.innerHTML =
+                "🗣️ Voice captured.";
+        }};
+
+
+        recognition.onerror = function(event) {{
+
+            statusBox.innerHTML =
+                "⚠️ Voice error: " + event.error;
+        }};
+
+
+        recognition.onend = function() {{
+
+            statusBox.innerHTML =
+                "⏹ Voice recognition stopped.";
+        }};
+
+    }} else {{
+
+        statusBox.innerHTML =
+            "⚠️ Voice recognition is not supported by this browser.";
+    }}
+
+
+    // -------------------------------------------------------
+    // START VOICE
+    // -------------------------------------------------------
+
+    startBtn.onclick = function() {{
+
+        if (!recognition) {{
+            statusBox.innerHTML =
+                "⚠️ Voice recognition is unavailable.";
+            return;
         }}
+
+        recognition.lang =
+            languageSelect.value;
+
+        try {{
+            recognition.start();
+
+            statusBox.innerHTML =
+                "🟢 Listening...";
+        }}
+        catch(error) {{
+            statusBox.innerHTML =
+                "🎤 Already listening.";
+        }}
+    }};
+
+
+    // -------------------------------------------------------
+    // STOP VOICE
+    // -------------------------------------------------------
+
+    stopBtn.onclick = function() {{
+
+        if (recognition) {{
+            recognition.stop();
+        }}
+
+        window.speechSynthesis.cancel();
+
+        statusBox.innerHTML =
+            "⏹ Voice stopped.";
+    }};
+
+
+    // -------------------------------------------------------
+    // OA-SENSE RESPONSE ENGINE
+    // -------------------------------------------------------
+
+    answerBtn.onclick = function() {{
+
+        const question =
+            questionBox.value.toLowerCase().trim();
+
+        if (!question) {{
+
+            responseBox.innerHTML =
+                "🎤 Please speak or type a question first.";
+
+            return;
+        }}
+
+
+        let answer = "";
+
+
+        // ANGLE
+        if (
+            question.includes("angle") ||
+            question.includes("knee angle") ||
+            question.includes("bend")
+        ) {{
+
+            answer =
+                "The current knee angle measured by OA-SENSE NER is "
+                + sensorData.angle.toFixed(1)
+                + " degrees.";
+        }}
+
+
+        // FSR
+        else if (
+            question.includes("fsr") ||
+            question.includes("pressure") ||
+            question.includes("force")
+        ) {{
+
+            answer =
+                "The current sensor readings are FSR one "
+                + sensorData.fsr1.toFixed(1)
+                + ", FSR two "
+                + sensorData.fsr2.toFixed(1)
+                + ", with total load "
+                + sensorData.total.toFixed(1)
+                + ".";
+        }}
+
+
+        // STATUS
+        else if (
+            question.includes("status") ||
+            question.includes("condition") ||
+            question.includes("result") ||
+            question.includes("risk")
+        ) {{
+
+            answer =
+                "The current OA-SENSE NER screening status is "
+                + sensorData.status
+                + ". This is a prototype screening result and is not a medical diagnosis.";
+        }}
+
+
+        // HARDWARE
+        else if (
+            question.includes("sensor") ||
+            question.includes("hardware") ||
+            question.includes("esp32")
+        ) {{
+
+            answer =
+                "OA-SENSE NER uses an ESP32 with knee movement and pressure sensing. "
+                + "The sensor data is transmitted to ThingSpeak and displayed on the dashboard.";
+        }}
+
+
+        // THINGSPEAK
+        else if (
+            question.includes("thingspeak") ||
+            question.includes("cloud") ||
+            question.includes("data")
+        ) {{
+
+            answer =
+                "OA-SENSE NER sends live sensor data from the ESP32 to ThingSpeak. "
+                + "The Streamlit dashboard reads the data from the ThingSpeak channel.";
+        }}
+
+
+        // OA-SENSE
+        else if (
+            question.includes("oa-sense") ||
+            question.includes("osteoarthritis") ||
+            question.includes("project")
+        ) {{
+
+            answer =
+                "OA-SENSE NER is an AI-assisted prototype designed to screen "
+                + "movement and sensor-based risk markers related to knee osteoarthritis. "
+                + "It combines sensor data, cloud monitoring and software analysis.";
+        }}
+
+
+        // HELP
+        else if (
+            question.includes("help") ||
+            question.includes("what can you do") ||
+            question.includes("commands")
+        ) {{
+
+            answer =
+                "You can ask me about the current knee angle, sensor readings, "
+                + "screening status, hardware, ThingSpeak data, or the OA-SENSE NER project.";
+        }}
+
+
+        // DEFAULT
+        else {{
+
+            answer =
+                "I can help with OA-SENSE NER information such as "
+                + "knee angle, FSR sensor readings, screening status, "
+                + "hardware, ThingSpeak data and project information.";
+        }}
+
+
+        responseBox.innerHTML = answer;
+
+        statusBox.innerHTML =
+            "🤖 OA-SENSE NER response generated.";
+
+    }};
+
+
+    // -------------------------------------------------------
+    // SPEAK RESPONSE
+    // -------------------------------------------------------
+
+    speakBtn.onclick = function() {{
+
+        const text =
+            responseBox.innerText;
+
+        if (!text ||
+            text === "OA-SENSE NER response will appear here.") {{
+
+            statusBox.innerHTML =
+                "🔊 Generate a response first.";
+
+            return;
+        }}
+
+
+        window.speechSynthesis.cancel();
+
+        const speech =
+            new SpeechSynthesisUtterance(text);
+
+        speech.lang =
+            languageSelect.value;
+
+        speech.rate = 0.9;
+        speech.pitch = 1.0;
+
+        speech.onstart = function() {{
+            statusBox.innerHTML =
+                "🔊 Speaking response...";
+        }};
+
+        speech.onend = function() {{
+            statusBox.innerHTML =
+                "✅ Response finished.";
+        }};
+
+        window.speechSynthesis.speak(speech);
+
+    }};
+
+
+    // -------------------------------------------------------
+    // COPY
+    // -------------------------------------------------------
+
+    copyBtn.onclick = async function() {{
+
+        const text =
+            questionBox.value;
+
+        if (!text) {{
+
+            statusBox.innerHTML =
+                "📋 Nothing to copy.";
+
+            return;
+        }}
+
+        try {{
+
+            await navigator.clipboard.writeText(text);
+
+            statusBox.innerHTML =
+                "✅ Question copied.";
+
+        }} catch(error) {{
+
+            questionBox.select();
+
+            document.execCommand("copy");
+
+            statusBox.innerHTML =
+                "✅ Question copied.";
+        }}
+    }};
+
+
+    // -------------------------------------------------------
+    // CLEAR
+    // -------------------------------------------------------
+
+    clearBtn.onclick = function() {{
+
+        questionBox.value = "";
+
+        responseBox.innerHTML =
+            "OA-SENSE NER response will appear here.";
+
+        statusBox.innerHTML =
+            "🧹 Cleared. Ready for a new question.";
+
+        window.speechSynthesis.cancel();
+
+    }};
+
+
+    // -------------------------------------------------------
+    // CHANGE LANGUAGE
+    // -------------------------------------------------------
+
+    languageSelect.onchange = function() {{
+
+        if (recognition) {{
+            recognition.lang =
+                languageSelect.value;
+        }}
+
+        window.speechSynthesis.cancel();
+
+        statusBox.innerHTML =
+            "🌐 Language changed.";
+
+    }};
+
     </script>
+
+    </body>
+    </html>
     """
 
-    components.html(voice_html, height=430, scrolling=False)
+
+    components.html(
+        voice_html,
+        height=610,
+        scrolling=False
+    )
+
 
     st.info(
         "💡 Allow microphone permission when your browser asks. "
-        "Voice recognition depends on browser and device support."
+        "Voice recognition and speech output depend on browser/device support."
     )
 
 # ============================================================
