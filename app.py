@@ -295,6 +295,7 @@ page = st.sidebar.radio(
         "🩻 X-ray Analysis",
         "📡 Hardware Monitoring",
         "📊 Analytics",
+        "🎤 Voice Assistant",
         "📄 Reports",
         "📋 Patient History",
         "⚙️ Settings"
@@ -1065,7 +1066,191 @@ elif page == "📊 Analytics":
         st.write(
             "• Field 6 → Buzzer"
         )
+elif page == "🎤 Voice Assistant":
+    st.header("🎤 Voice Assistant")
+    st.write("Speak with OA-SENSE NER using your preferred language.")
 
+    st.markdown("""
+    <style>
+    .voice-box {
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid #dddddd;
+        margin-bottom: 15px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    language = st.selectbox(
+        "🌐 Select Language",
+        [
+            "English",
+            "Kannada",
+            "Hindi",
+            "Tamil",
+            "Telugu",
+            "Malayalam",
+            "Marathi",
+            "Bengali",
+            "Gujarati",
+            "Punjabi",
+            "Urdu",
+            "Spanish",
+            "French",
+            "German",
+            "Arabic",
+            "Chinese",
+            "Japanese"
+        ]
+    )
+
+    language_codes = {
+        "English": "en-IN",
+        "Kannada": "kn-IN",
+        "Hindi": "hi-IN",
+        "Tamil": "ta-IN",
+        "Telugu": "te-IN",
+        "Malayalam": "ml-IN",
+        "Marathi": "mr-IN",
+        "Bengali": "bn-IN",
+        "Gujarati": "gu-IN",
+        "Punjabi": "pa-IN",
+        "Urdu": "ur-IN",
+        "Spanish": "es-ES",
+        "French": "fr-FR",
+        "German": "de-DE",
+        "Arabic": "ar-SA",
+        "Chinese": "zh-CN",
+        "Japanese": "ja-JP"
+    }
+
+    lang_code = language_codes[language]
+
+    import streamlit.components.v1 as components
+
+    voice_html = f"""
+    <div class="voice-box">
+        <h3>🎤 Voice Recognition</h3>
+
+        <button id="startBtn"
+                style="
+                padding:12px 20px;
+                border:none;
+                border-radius:10px;
+                background:#4CAF50;
+                color:white;
+                font-size:16px;
+                cursor:pointer;">
+            🎤 Start Speaking
+        </button>
+
+        <button id="stopBtn"
+                style="
+                padding:12px 20px;
+                border:none;
+                border-radius:10px;
+                background:#f44336;
+                color:white;
+                font-size:16px;
+                cursor:pointer;">
+            ⏹ Stop
+        </button>
+
+        <p><b>Language:</b> {language}</p>
+
+        <textarea id="result"
+                  rows="5"
+                  style="
+                  width:100%;
+                  padding:10px;
+                  font-size:16px;"
+                  placeholder="Your speech will appear here..."></textarea>
+
+        <p id="status">Ready to listen.</p>
+    </div>
+
+    <script>
+        const SpeechRecognition =
+            window.SpeechRecognition ||
+            window.webkitSpeechRecognition;
+
+        const result = document.getElementById("result");
+        const status = document.getElementById("status");
+        const startBtn = document.getElementById("startBtn");
+        const stopBtn = document.getElementById("stopBtn");
+
+        if (!SpeechRecognition) {{
+            status.innerHTML =
+                "❌ Voice recognition is not supported in this browser.";
+            startBtn.disabled = true;
+        }} else {{
+
+            const recognition = new SpeechRecognition();
+
+            recognition.lang = "{lang_code}";
+            recognition.continuous = true;
+            recognition.interimResults = true;
+
+            recognition.onstart = function() {{
+                status.innerHTML = "🟢 Listening...";
+            }};
+
+            recognition.onresult = function(event) {{
+
+                let finalText = "";
+                let interimText = "";
+
+                for (
+                    let i = event.resultIndex;
+                    i < event.results.length;
+                    i++
+                ) {{
+                    const transcript =
+                        event.results[i][0].transcript;
+
+                    if (event.results[i].isFinal) {{
+                        finalText += transcript + " ";
+                    }} else {{
+                        interimText += transcript;
+                    }}
+                }}
+
+                if (finalText) {{
+                    result.value += finalText;
+                }}
+
+                if (interimText) {{
+                    status.innerHTML =
+                        "🗣️ " + interimText;
+                }}
+            }};
+
+            recognition.onerror = function(event) {{
+                status.innerHTML =
+                    "⚠️ Error: " + event.error;
+            }};
+
+            recognition.onend = function() {{
+                status.innerHTML = "⏹ Voice recognition stopped.";
+            }};
+
+            startBtn.onclick = function() {{
+                recognition.start();
+            }};
+
+            stopBtn.onclick = function() {{
+                recognition.stop();
+            }};
+        }}
+    </script>
+    """
+
+    components.html(voice_html, height=430, scrolling=False)
+
+    st.info(
+        "💡 Allow microphone permission when your browser asks. "
+        "Voice recognition depends on browser and device support."
+    )
 
 # ============================================================
 # REPORTS
