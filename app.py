@@ -1707,9 +1707,23 @@ elif page == "🎤 Voice Assistant":
 
         responseBox.innerHTML = answer;
 
-        statusBox.innerHTML =
-            "🤖 OA-SENSE NER response generated.";
+statusBox.innerHTML =
+    "🤖 Response generated. 🔊 Speaking...";
 
+window.speechSynthesis.cancel();
+
+const speech = new SpeechSynthesisUtterance(answer);
+
+speech.lang = languageSelect.value;
+speech.rate = 0.9;
+speech.pitch = 1.0;
+
+speech.onend = function() {
+    statusBox.innerHTML =
+        "✅ Response generated and spoken.";
+};
+
+window.speechSynthesis.speak(speech);
     }};
 
 
@@ -1840,8 +1854,8 @@ elif page == "🎤 Voice Assistant":
 
     components.html(
         voice_html,
-        height=610,
-        scrolling=False
+        height=800,
+        scrolling=True
     )
 
 
