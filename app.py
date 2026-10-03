@@ -151,7 +151,7 @@ if page == "🏠 Dashboard":
         st.info("🦵 Knee Movement Monitoring")
 
     with col2:
-        st.info("📡 ESP32 + MPU6500")
+        st.info("📡 ESP32 + MPU6050")
 
     with col3:
         st.info("☁️ ThingSpeak Cloud")
@@ -566,7 +566,7 @@ elif page == "🎤 Voice Assistant":
 
             response_text = (
                 "OA-SENSE NER uses an ESP32 with an "
-                "MPU6500 motion sensor, FSR sensors, "
+                "MPU6050 motion sensor, FSR sensors, "
                 "an OLED display and ThingSpeak cloud "
                 "monitoring."
             )
@@ -929,7 +929,7 @@ elif page == "⚙️ Settings":
     )
 
     st.write(
-        "MPU6500 — I2C"
+        "MPU6050 — I2C"
     )
 
     st.write(
