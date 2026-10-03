@@ -875,7 +875,7 @@ elif page == "📊 Analytics":
         )
 
         if not load_df.empty:
-load_df = load_df.set_index(
+           load_df = load_df.set_index(
                 "Time"
             )
 
