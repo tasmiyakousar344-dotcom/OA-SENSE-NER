@@ -1,41 +1,30 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
 from datetime import datetime
 
 # ============================================================
-# PAGE CONFIG
+# PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
     page_title="OA-SENSE NER",
     page_icon="🦵",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # ============================================================
-# CONFIGURATION
+# THINGSPEAK CONFIGURATION
 # ============================================================
 
 THINGSPEAK_CHANNEL_ID = "3502394"
 
-# Keep empty if your ThingSpeak channel is PUBLIC.
-# For a PRIVATE channel, enter the READ API KEY here.
+# Leave empty if your ThingSpeak channel is PUBLIC.
+# If the channel is PRIVATE, put your READ API KEY here.
 THINGSPEAK_READ_API_KEY = ""
 
 HIGH_RISK_ANGLE = 25.0
 
-THINGSPEAK_LAST_URL = (
-    "https://api.thingspeak.com/channels/"
-    "3502394/feeds/last.json"
-)
-
-THINGSPEAK_FEEDS_URL = (
-    "https://api.thingspeak.com/channels/"
-    "3502394/feeds.json"
-)
 
 # ============================================================
 # SESSION STATE
@@ -44,86 +33,25 @@ THINGSPEAK_FEEDS_URL = (
 if "history" not in st.session_state:
     st.session_state.history = []
 
-if "live_readings" not in st.session_state:
-    st.session_state.live_readings = []
+if "historical_df" not in st.session_state:
+    st.session_state.historical_df = None
 
-if "last_data" not in st.session_state:
-    st.session_state.last_data = None
+if "historical_error" not in st.session_state:
+    st.session_state.historical_error = None
 
-# ============================================================
-# CUSTOM CSS
-# ============================================================
-
-st.markdown(
-    """
-    <style>
-
-    .main-title {
-        font-size: 42px;
-        font-weight: 800;
-        margin-bottom: 0px;
-    }
-
-    .subtitle {
-        font-size: 17px;
-        color: #666666;
-        margin-bottom: 25px;
-    }
-
-    .status-card {
-        padding: 18px;
-        border-radius: 14px;
-        border: 1px solid #dddddd;
-        background-color: #ffffff;
-        margin-bottom: 10px;
-    }
-
-    .metric-card {
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #dddddd;
-        text-align: center;
-        background-color: #ffffff;
-    }
-
-    .big-number {
-        font-size: 36px;
-        font-weight: 800;
-    }
-
-    .normal-box {
-        padding: 18px;
-        border-radius: 14px;
-        background-color: #eaf7ee;
-        border: 1px solid #9bd3aa;
-    }
-
-    .warning-box {
-        padding: 18px;
-        border-radius: 14px;
-        background-color: #fff3e0;
-        border: 1px solid #f0b45b;
-    }
-
-    .danger-box {
-        padding: 18px;
-        border-radius: 14px;
-        background-color: #fdecec;
-        border: 1px solid #e09b9b;
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 # ============================================================
-# THINGSPEAK - LATEST DATA
+# GET LATEST HARDWARE DATA
 # ============================================================
 
-def get_latest_hardware_data():
+def get_hardware_data():
 
     try:
+
+        url = (
+            f"https://api.thingspeak.com/channels/"
+            f"{THINGSPEAK_CHANNEL_ID}/feeds/last.json"
+        )
 
         params = {}
 
@@ -131,7 +59,7 @@ def get_latest_hardware_data():
             params["api_key"] = THINGSPEAK_READ_API_KEY
 
         response = requests.get(
-            THINGSPEAK_LAST_URL,
+            url,
             params=params,
             timeout=10
         )
@@ -145,34 +73,101 @@ def get_latest_hardware_data():
         if field1 is None:
             return None, "No knee-angle data found in ThingSpeak Field 1."
 
-        angle = float(field1)
+        knee_angle = float(field1)
+
+        # Optional fields
+        fsr1 = data.get("field2")
+        fsr2 = data.get("field3")
+        total_load = data.get("field4")
+        status_code = data.get("field5")
+        buzzer = data.get("field6")
+
+        try:
+            fsr1 = float(fsr1) if fsr1 not in (None, "") else None
+        except (ValueError, TypeError):
+            fsr1 = None
+
+        try:
+            fsr2 = float(fsr2) if fsr2 not in (None, "") else None
+        except (ValueError, TypeError):
+            fsr2 = None
+
+        try:
+            total_load = (
+                float(total_load)
+                if total_load not in (None, "")
+                else None
+            )
+        except (ValueError, TypeError):
+            total_load = None
+
+        try:
+            status_code = (
+                int(float(status_code))
+                if status_code not in (None, "")
+                else None
+            )
+        except (ValueError, TypeError):
+            status_code = None
+
+        try:
+            buzzer = (
+                int(float(buzzer))
+                if buzzer not in (None, "")
+                else None
+            )
+        except (ValueError, TypeError):
+            buzzer = None
+
+        timestamp = data.get(
+            "created_at",
+            ""
+        )
 
         return {
-            "knee_angle": angle,
-            "timestamp": data.get("created_at", ""),
-            "entry_id": data.get("entry_id", "")
+            "knee_angle": knee_angle,
+            "fsr1": fsr1,
+            "fsr2": fsr2,
+            "total_load": total_load,
+            "status_code": status_code,
+            "buzzer": buzzer,
+            "timestamp": timestamp
         }, None
 
     except requests.exceptions.RequestException as e:
 
-        return None, f"ThingSpeak connection error: {e}"
+        return (
+            None,
+            f"ThingSpeak connection error: {e}"
+        )
 
     except ValueError:
 
-        return None, "Invalid knee-angle value received from ThingSpeak."
+        return (
+            None,
+            "Invalid sensor value received."
+        )
 
     except Exception as e:
 
-        return None, f"Hardware data error: {e}"
+        return (
+            None,
+            f"Hardware data error: {e}"
+        )
 
 
 # ============================================================
-# THINGSPEAK - RECENT DATA
+# GET HISTORICAL THINGSPEAK DATA
 # ============================================================
 
-def get_recent_hardware_data(results=30):
+def get_historical_data(results=100):
 
     try:
+
+        url = (
+            f"https://api.thingspeak.com/channels/"
+            f"{THINGSPEAK_CHANNEL_ID}/feeds.json"
+        )
 
         params = {
             "results": results
@@ -182,7 +177,7 @@ def get_recent_hardware_data(results=30):
             params["api_key"] = THINGSPEAK_READ_API_KEY
 
         response = requests.get(
-            THINGSPEAK_FEEDS_URL,
+            url,
             params=params,
             timeout=10
         )
@@ -193,78 +188,129 @@ def get_recent_hardware_data(results=30):
 
         feeds = data.get("feeds", [])
 
+        if not feeds:
+
+            return (
+                None,
+                "No historical data available in ThingSpeak."
+            )
+
         rows = []
 
         for feed in feeds:
 
-            if feed.get("field1") is not None:
+            rows.append(
+                {
+                    "Time": feed.get("created_at"),
 
-                try:
+                    "Knee Angle (°)": (
+                        pd.to_numeric(
+                            feed.get("field1"),
+                            errors="coerce"
+                        )
+                    ),
 
-                    rows.append(
-                        {
-                            "Time": feed.get("created_at", ""),
-                            "Knee Angle": float(
-                                feed.get("field1")
-                            ),
-                            "Entry": feed.get(
-                                "entry_id", ""
-                            )
-                        }
+                    "FSR1": (
+                        pd.to_numeric(
+                            feed.get("field2"),
+                            errors="coerce"
+                        )
+                    ),
+
+                    "FSR2": (
+                        pd.to_numeric(
+                            feed.get("field3"),
+                            errors="coerce"
+                        )
+                    ),
+
+                    "Total Load": (
+                        pd.to_numeric(
+                            feed.get("field4"),
+                            errors="coerce"
+                        )
+                    ),
+
+                    "Status Code": (
+                        pd.to_numeric(
+                            feed.get("field5"),
+                            errors="coerce"
+                        )
+                    ),
+
+                    "Buzzer": (
+                        pd.to_numeric(
+                            feed.get("field6"),
+                            errors="coerce"
+                        )
                     )
-
-                except ValueError:
-                    pass
-
-        if not rows:
-
-            return None, "No recent Field 1 data available."
+                }
+            )
 
         df = pd.DataFrame(rows)
 
+        df["Time"] = pd.to_datetime(
+            df["Time"],
+            errors="coerce"
+        )
+
+        df = df.dropna(
+            subset=["Time"]
+        )
+
+        df = df.sort_values(
+            "Time"
+        )
+
         return df, None
+
+    except requests.exceptions.RequestException as e:
+
+        return (
+            None,
+            f"ThingSpeak connection error: {e}"
+        )
 
     except Exception as e:
 
-        return None, f"Unable to read recent data: {e}"
+        return (
+            None,
+            f"Historical data error: {e}"
+        )
 
 
 # ============================================================
 # SIDEBAR
 # ============================================================
 
-st.sidebar.markdown(
-    "## 🦵 OA-SENSE NER"
-)
-
-st.sidebar.caption(
-    "AI-Assisted Osteoarthritis Risk Marker Monitoring"
-)
-
-st.sidebar.divider()
+st.sidebar.title("🦵 OA-SENSE NER")
 
 page = st.sidebar.radio(
-    "Navigation",
+    "🧭 Navigation",
     [
         "🏠 Dashboard",
-        "📡 Live Monitoring",
         "👤 Patient Assessment",
-        "📋 Patient History",
-        "📊 Analytics",
-        "🤖 AI Analysis",
+        "🧠 NER Analysis",
+        "🤖 ML Prediction",
         "🩻 X-ray Analysis",
+        "📡 Hardware Monitoring",
+        "📊 Analytics",
         "📄 Reports",
-        "🌎 NER Insights",
+        "📋 Patient History",
         "⚙️ Settings"
     ]
 )
 
 st.sidebar.divider()
 
-st.sidebar.info(
-    "Prototype system for research and demonstration. "
-    "Outputs are not a clinical diagnosis."
+st.sidebar.caption(
+    f"☁️ ThingSpeak Channel: {THINGSPEAK_CHANNEL_ID}"
 )
+
+st.sidebar.caption(
+    "📡 Live source: ESP32 → ThingSpeak"
+)
+
 
 # ============================================================
 # DASHBOARD
@@ -272,313 +318,112 @@ st.sidebar.info(
 
 if page == "🏠 Dashboard":
 
-    st.markdown(
-        '<div class="main-title">OA-SENSE NER</div>',
-        unsafe_allow_html=True
+    st.title("🦵 OA-SENSE NER")
+
+    st.subheader(
+        "AI-Assisted Early Detection System "
+        "for Osteoarthritis Risk Markers"
     )
 
-    st.markdown(
-        '<div class="subtitle">'
-        'AI-Assisted Early Detection & Monitoring Platform'
-        '</div>',
-        unsafe_allow_html=True
+    st.write(
+        "North Eastern Region (NER)"
     )
-
-    # Get latest data
-    hardware_data, hardware_error = (
-        get_latest_hardware_data()
-    )
-
-    if hardware_data:
-
-        angle = hardware_data["knee_angle"]
-        timestamp = hardware_data["timestamp"]
-
-        connection_status = "🟢 ONLINE"
-
-    else:
-
-        angle = None
-        timestamp = ""
-        connection_status = "🔴 OFFLINE"
-
-    # Status cards
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        st.metric(
-            "ESP32",
-            connection_status
-        )
-
-    with c2:
-        st.metric(
-            "ThingSpeak",
-            "🟢 CONNECTED"
-            if hardware_data
-            else "🔴 ERROR"
-        )
-
-    with c3:
-        if angle is not None:
-            st.metric(
-                "Knee Angle",
-                f"{angle:.1f}°"
-            )
-        else:
-            st.metric(
-                "Knee Angle",
-                "--"
-            )
-
-    with c4:
-        st.metric(
-            "Prototype Threshold",
-            f"{HIGH_RISK_ANGLE:.0f}°"
-        )
 
     st.divider()
 
-    # Main status
-    if angle is not None:
+    col1, col2, col3 = st.columns(3)
 
-        if angle > HIGH_RISK_ANGLE:
+    with col1:
+        st.info("🦵 Knee Movement Monitoring")
 
-            st.error(
-                f"🚨 ATTENTION — Knee angle: {angle:.1f}°"
+    with col2:
+        st.info("📡 ESP32 + MPU6500")
+
+    with col3:
+        st.info("☁️ ThingSpeak Cloud")
+
+    st.divider()
+
+    st.subheader("📡 Latest Hardware Status")
+
+    hardware_data, hardware_error = get_hardware_data()
+
+    if hardware_data is not None:
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "🦵 Knee Angle",
+                f"{hardware_data['knee_angle']:.1f}°"
             )
 
+        with col2:
+
+            if hardware_data["fsr1"] is not None:
+                st.metric(
+                    "FSR1",
+                    f"{hardware_data['fsr1']:.2f}"
+                )
+            else:
+                st.metric(
+                    "FSR1",
+                    "N/A"
+                )
+
+        with col3:
+
+            if hardware_data["fsr2"] is not None:
+                st.metric(
+                    "FSR2",
+                    f"{hardware_data['fsr2']:.2f}"
+                )
+            else:
+                st.metric(
+                    "FSR2",
+                    "N/A"
+                )
+
+        with col4:
+
+            if hardware_data["total_load"] is not None:
+                st.metric(
+                    "⚖️ Total Load",
+                    f"{hardware_data['total_load']:.2f}"
+                )
+            else:
+                st.metric(
+                    "⚖️ Total Load",
+                    "N/A"
+                )
+
+        if hardware_data["knee_angle"] > HIGH_RISK_ANGLE:
+
             st.warning(
-                f"The reading is above the prototype "
-                f"warning threshold of"
-            f"{HIGH_RISK_ANGLE:.0f}°."
+                "⚠️ Prototype warning threshold exceeded."
             )
 
         else:
 
             st.success(
-                f"🟢 NORMAL PROTOTYPE RANGE — "
-                f"Knee angle: {angle:.1f}°"
+                "✅ Current reading is below the prototype warning threshold."
+            )
+
+        if hardware_data["timestamp"]:
+
+            st.caption(
+                f"Last ThingSpeak update: "
+                f"{hardware_data['timestamp']}"
             )
 
     else:
 
-        st.error(
-            "Hardware data is currently unavailable."
+        st.info(
+            "📡 Hardware data is not currently available."
         )
 
         if hardware_error:
             st.caption(hardware_error)
-
-    st.divider()
-
-    st.subheader("📈 Recent Movement")
-
-    df, error = get_recent_hardware_data(30)
-
-    if df is not None:
-
-        chart_df = df.copy()
-
-        chart_df["Time"] = pd.to_datetime(
-            chart_df["Time"],
-            errors="coerce"
-        )
-
-        chart_df = chart_df.dropna(
-            subset=["Time"]
-        )
-
-        chart_df = chart_df.set_index("Time")
-
-        st.line_chart(
-            chart_df["Knee Angle"],
-            height=350
-        )
-
-    else:
-
-        st.info(
-            "Recent movement data is not available."
-        )
-
-    if timestamp:
-
-        st.caption(
-            f"Last ThingSpeak update: {timestamp}"
-        )
-
-
-# ============================================================
-# LIVE MONITORING
-# ============================================================
-
-elif page == "📡 Live Monitoring":
-
-    st.title("📡 Live Hardware Monitoring")
-
-    st.caption(
-        "ESP32 → MPU6050 → ThingSpeak → OA-SENSE NER"
-    )
-
-    if st.button("🔄 Refresh Live Data"):
-
-        st.rerun()
-
-    st.divider()
-
-    hardware_data, hardware_error = (
-        get_latest_hardware_data()
-    )
-
-    if hardware_data:
-
-        angle = hardware_data["knee_angle"]
-
-        timestamp = hardware_data["timestamp"]
-
-        entry_id = hardware_data["entry_id"]
-
-        # Current values
-        c1, c2, c3, c4 = st.columns(4)
-
-        with c1:
-            st.metric(
-                "🦵 Current Angle",
-                f"{angle:.1f}°"
-            )
-
-        with c2:
-            st.metric(
-                "⚠️ Threshold",
-                f"{HIGH_RISK_ANGLE:.0f}°"
-            )
-
-        with c3:
-            st.metric(
-                "☁️ Channel",
-                THINGSPEAK_CHANNEL_ID
-            )
-
-        with c4:
-            st.metric(
-                "Entry ID",
-                str(entry_id)
-            )
-
-        st.divider()
-
-        if angle > HIGH_RISK_ANGLE:
-
-            st.error(
-                "🚨 HIGH-ATTENTION STATE"
-            )
-
-            st.warning(
-                f"Measured angle: {angle:.1f}°"
-            )
-
-            st.info(
-                "The ESP32 prototype buzzer is configured "
-                "to activate above the selected threshold."
-            )
-
-        else:
-
-            st.success(
-                "🟢 NORMAL PROTOTYPE RANGE"
-            )
-
-        st.divider()
-
-        st.subheader("📈 Live Knee-Angle Trend")
-
-        df, error = get_recent_hardware_data(50)
-
-        if df is not None:
-
-            plot_df = df.copy()
-
-            plot_df["Time"] = pd.to_datetime(
-                plot_df["Time"],
-                errors="coerce"
-            )
-
-            plot_df = plot_df.dropna(
-                subset=["Time"]
-            )
-
-            plot_df = plot_df.set_index(
-                "Time"
-            )
-
-            st.line_chart(
-                plot_df["Knee Angle"],
-                height=400
-            )
-
-            st.subheader(
-                "Recent Sensor Readings"
-            )
-
-            display_df = df.copy()
-
-            display_df["Status"] = display_df[
-                "Knee Angle"
-            ].apply(
-                lambda x:
-                "Attention"
-                if x > HIGH_RISK_ANGLE
-                else "Normal"
-            )
-
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True
-            )
-
-            angles = df["Knee Angle"]
-
-            c1, c2, c3 = st.columns(3)
-
-            with c1:
-                st.metric(
-                    "Average",
-                    f"{angles.mean():.1f}°"
-                )
-
-            with c2:
-                st.metric(
-                    "Maximum",
-                    f"{angles.max():.1f}°"
-                )
-
-            with c3:
-                st.metric(
-                    "Minimum",
-                    f"{angles.min():.1f}°"
-                )
-
-        else:
-
-            st.warning(error)
-
-        if timestamp:
-
-            st.caption(
-                f"Last update: {timestamp}"
-            )
-
-    else:
-
-        st.error(
-            "❌ Hardware data not received."
-        )
-
-        st.info(
-            hardware_error
-        )
 
 
 # ============================================================
@@ -589,324 +434,67 @@ elif page == "👤 Patient Assessment":
 
     st.title("👤 Patient Assessment")
 
-    st.caption(
-        "Create a structured prototype assessment record."
+    name = st.text_input("Patient Name")
+
+    age = st.number_input(
+        "Age",
+        min_value=1,
+        max_value=120,
+        value=30
     )
 
-    with st.form("patient_form"):
+    symptoms = st.text_area(
+        "Symptoms / Observations"
+    )
 
-        col1, col2 = st.columns(2)
+    if st.button("💾 Save Assessment"):
 
-        with col1:
-
-            patient_id = st.text_input(
-                "Patient ID",
-                placeholder="OA-001"
-            )
-
-            patient_name = st.text_input(
-                "Patient Name"
-            )
-
-            age = st.number_input(
-                "Age",
-                min_value=1,
-                max_value=120,
-                value=30
-            )
-
-        with col2:
-
-            region = st.selectbox(
-                "Region",
-                [
-                    "Assam",
-                    "Arunachal Pradesh",
-                    "Manipur",
-                    "Meghalaya",
-                    "Mizoram",
-                    "Nagaland",
-                    "Sikkim",
-                    "Tripura",
-                    "Other"
-                ]
-            )
-
-            pain_score = st.slider(
-                "Reported Pain Score",
-                0,
-                10,
-                0
-            )
-
-            mobility = st.selectbox(
-                "Mobility Observation",
-                [
-                    "Normal",
-                    "Mild difficulty",
-                    "Moderate difficulty",
-                    "Severe difficulty"
-                ]
-            )
-
-        symptoms = st.text_area(
-            "Symptoms / Observations"
-        )
-
-        submitted = st.form_submit_button(
-            "💾 Save Assessment"
-        )
-
-    if submitted:
-
-        if not patient_id:
-
-            st.error(
-                "Please enter a Patient ID."
-            )
-
-        else:
-
-            record = {
-                "Patient ID": patient_id,
-                "Patient Name": patient_name,
+        st.session_state.history.append(
+            {
+                "Patient Name": name,
                 "Age": age,
-                "Region": region,
-                "Pain Score": pain_score,
-                "Mobility": mobility,
                 "Symptoms": symptoms,
                 "Date": datetime.now().strftime(
                     "%Y-%m-%d %H:%M"
                 )
             }
-
-            st.session_state.history.append(
-                record
-            )
-
-            st.success(
-                "✅ Patient assessment saved."
-            )
-
-
-# ============================================================
-# PATIENT HISTORY
-# ============================================================
-
-elif page == "📋 Patient History":
-
-    st.title("📋 Patient History")
-
-    if not st.session_state.history:
-
-        st.info(
-            "No patient assessments have been saved yet."
         )
 
-    else:
-
-        df = pd.DataFrame(
-            st.session_state.history
-        )
-
-        search = st.text_input(
-            "🔎 Search Patient ID"
-        )
-
-        if search:
-
-            df = df[
-                df["Patient ID"]
-                .astype(str)
-                .str.contains(
-                    search,
-                    case=False,
-                    na=False
-                )
-            ]
-
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True
+        st.success(
+            "✅ Patient assessment saved successfully."
         )
 
 
 # ============================================================
-# ANALYTICS
+# NER ANALYSIS
 # ============================================================
 
-elif page == "📊 Analytics":
+elif page == "🧠 NER Analysis":
 
-    st.title("📊 Movement Analytics")
-
-    df, error = get_recent_hardware_data(100)
-
-    if df is None:
-
-        st.warning(error)
-
-    else:
-
-        angles = df["Knee Angle"]
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        with c1:
-            st.metric(
-                "Average Angle",
-                f"{angles.mean():.1f}°"
-            )
-
-        with c2:
-            st.metric(
-                "Maximum Angle",
-                f"{angles.max():.1f}°"
-            )
-
-        with c3:
-            st.metric(
-                "Minimum Angle",
-                f"{angles.min():.1f}°"
-            )
-
-        with c4:
-
-            alerts = (
-                angles > HIGH_RISK_ANGLE
-            ).sum()
-
-            st.metric(
-                "Threshold Crossings",
-                int(alerts)
-            )
-
-        st.divider()
-
-        st.subheader(
-            "📈 Movement Trend"
-        )
-
-        plot_df = df.copy()
-
-        plot_df["Time"] = pd.to_datetime(
-            plot_df["Time"],
-            errors="coerce"
-        )
-
-        plot_df = plot_df.dropna(
-            subset=["Time"]
-        )
-
-        plot_df = plot_df.set_index(
-            "Time"
-        )
-
-        st.line_chart(
-            plot_df["Knee Angle"],
-            height=400
-        )
-
-        st.divider()
-
-        st.subheader(
-            "📊 Statistical Summary"
-        )
-
-        st.dataframe(
-            angles.describe().to_frame(
-                "Knee Angle (°)"
-            ),
-            use_container_width=True
-        )
-        # ============================================================
-# AI ANALYSIS
-# ============================================================
-
-elif page == "🤖 AI Analysis":
-
-    st.title("🤖 AI-Assisted Analysis")
+    st.title("🧠 NER Analysis")
 
     st.info(
-        "This section is designed for the project's "
-        "future trained ML model."
+        "Regional analysis and patient information "
+        "can be displayed here."
     )
 
-    hardware_data, error = (
-        get_latest_hardware_data()
+
+# ============================================================
+# ML PREDICTION
+# ============================================================
+
+elif page == "🤖 ML Prediction":
+
+    st.title("🤖 ML Prediction")
+
+    st.info(
+        "Machine-learning prediction module."
     )
 
-    if hardware_data:
-
-        angle = hardware_data["knee_angle"]
-
-        st.subheader(
-            "Current Movement Indicator"
-        )
-
-        if angle > HIGH_RISK_ANGLE:
-
-            st.warning(
-                f"Current sensor reading: {angle:.1f}°"
-            )
-
-        else:
-
-            st.success(
-                f"Current sensor reading: {angle:.1f}°"
-            )
-
-        st.divider()
-
-        st.subheader(
-            "Explainable Prototype Indicators"
-        )
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            st.write(
-                "### Movement"
-            )
-
-            st.write(
-                "Current sensor measurement"
-            )
-
-            st.write(
-                f"**{angle:.1f}°**"
-            )
-
-        with col2:
-
-            st.write(
-                "### Threshold Status"
-            )
-
-            if angle > HIGH_RISK_ANGLE:
-
-                st.write(
-                    "⚠️ Above prototype threshold"
-                )
-
-            else:
-
-                st.write(
-                    "🟢 Within prototype range"
-                )
-
-        st.divider()
-
-        st.warning(
-            "A trained and validated ML model must be "
-            "connected before presenting an AI prediction "
-            "as a model-generated result."
-        )
-
-    else:
-
-        st.error(error)
+    st.warning(
+        "⚠️ This prototype output should not be "
+        "treated as a medical diagnosis."
+    )
 
 
 # ============================================================
@@ -917,17 +505,9 @@ elif page == "🩻 X-ray Analysis":
 
     st.title("🩻 X-ray Analysis")
 
-    st.write(
-        "AI-assisted imaging module"
-    )
-
     uploaded_file = st.file_uploader(
         "Upload X-ray image",
-        type=[
-            "jpg",
-            "jpeg",
-            "png"
-        ]
+        type=["jpg", "jpeg", "png"]
     )
 
     if uploaded_file:
@@ -938,45 +518,552 @@ elif page == "🩻 X-ray Analysis":
             use_container_width=True
         )
 
-        st.success(
-            "Image uploaded successfully."
-        )
-
-        st.subheader(
-            "Image Quality Check"
-        )
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-            st.write(
-                "📷 Image received"
-            )
-
-        with c2:
-            st.write(
-                "✓ Supported format"
-            )
-
-        with c3:
-            st.write(
-                "✓ Ready for preprocessing"
-            )
-
         st.info(
-            "Connect your trained X-ray model here "
-            "for actual prediction and Grad-CAM analysis."
+            "🩻 X-ray analysis module ready."
+        )
+
+
+# ============================================================
+# HARDWARE MONITORING
+# ============================================================
+
+elif page == "📡 Hardware Monitoring":
+
+    st.title("📡 Hardware Monitoring")
+
+    st.write(
+        "Live sensor data from ESP32 → ThingSpeak"
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # REFRESH BUTTON
+    # --------------------------------------------------------
+
+    if st.button("🔄 Refresh Data"):
+
+        st.rerun()
+
+    # --------------------------------------------------------
+    # GET DATA
+    # --------------------------------------------------------
+
+    hardware_data, hardware_error = (
+        get_hardware_data()
+    )
+
+    # --------------------------------------------------------
+    # DISPLAY DATA
+    # --------------------------------------------------------
+
+    if hardware_data is not None:
+
+        knee_angle = hardware_data["knee_angle"]
+
+        timestamp = hardware_data["timestamp"]
+
+        st.success(
+            "🟢 ESP32 / ThingSpeak data received"
+        )
+
+        st.divider()
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+
+            st.metric(
+                "🦵 Knee Angle",
+                f"{knee_angle:.1f}°"
+            )
+
+        with col2:
+
+            if hardware_data["fsr1"] is not None:
+
+                st.metric(
+                    "FSR1",
+                    f"{hardware_data['fsr1']:.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "FSR1",
+                    "N/A"
+                )
+
+        with col3:
+
+            if hardware_data["fsr2"] is not None:
+
+                st.metric(
+                    "FSR2",
+                    f"{hardware_data['fsr2']:.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "FSR2",
+                    "N/A"
+                )
+
+        with col4:
+
+            if hardware_data["total_load"] is not None:
+
+                st.metric(
+                    "⚖️ Total Load",
+                    f"{hardware_data['total_load']:.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "⚖️ Total Load",
+                    "N/A"
+                )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # WARNING
+        # ----------------------------------------------------
+
+        if knee_angle > HIGH_RISK_ANGLE:
+
+            st.error(
+                "🚨 PROTOTYPE WARNING"
+            )
+
+            st.warning(
+                f"Knee angle is {knee_angle:.1f}°."
+            )
+
+            st.info(
+                "The measured angle is above the "
+                "prototype warning threshold of "
+                f"{HIGH_RISK_ANGLE:.0f}°."
+            )
+
+        else:
+
+            st.success(
+                f"✅ Below prototype warning threshold — "
+                f"Knee angle: {knee_angle:.1f}°"
+            )
+
+        # ----------------------------------------------------
+        # BUZZER
+        # ----------------------------------------------------
+
+        if hardware_data["buzzer"] is not None:
+
+            if hardware_data["buzzer"] == 1:
+
+                st.warning(
+                    "🔔 Buzzer status: ON"
+                )
+
+            else:
+
+                st.success(
+                    "🔕 Buzzer status: OFF"
+                )
+
+        # ----------------------------------------------------
+        # TIMESTAMP
+        # ----------------------------------------------------
+
+        if timestamp:
+
+            st.caption(
+                f"Last ThingSpeak update: {timestamp}"
+            )
+
+    else:
+
+        st.error(
+            "❌ Hardware data not received"
         )
 
         st.warning(
-            "Do not interpret this upload screen as "
-            "a medical diagnosis."
+            hardware_error
+        )
+
+        st.info(
+            "Check that ESP32 is sending data "
+            "to ThingSpeak."
+        )
+
+
+# ============================================================
+# ANALYTICS
+# ============================================================
+
+elif page == "📊 Analytics":
+
+    st.title("📊 Analytics")
+
+    st.write(
+        "Historical sensor data from "
+        "ESP32 → ThingSpeak."
+    )
+
+    st.divider()
+
+    # --------------------------------------------------------
+    # NUMBER OF READINGS
+    # --------------------------------------------------------
+
+    results = st.selectbox(
+        "📌 Number of ThingSpeak readings",
+        [50, 100, 200, 500],
+        index=1
+    )
+
+    # --------------------------------------------------------
+    # REFRESH GRAPH DATA
+    # --------------------------------------------------------
+
+    if st.button(
+        "🔄 Load / Refresh Graphs",
+        type="primary"
+    ):
+
+        historical_df, historical_error = (
+            get_historical_data(
+                results=results
+            )
+        )
+
+        st.session_state.historical_df = historical_df
+
+        st.session_state.historical_error = (
+            historical_error
+        )
+
+    # --------------------------------------------------------
+    # AUTOMATIC FIRST LOAD
+    # --------------------------------------------------------
+
+    if st.session_state.historical_df is None:
+
+        historical_df, historical_error = (
+            get_historical_data(
+                results=results
+            )
+        )
+
+        st.session_state.historical_df = (
+            historical_df
+        )
+
+        st.session_state.historical_error = (
+            historical_error
+        )
+
+    historical_df = st.session_state.historical_df
+
+    historical_error = (
+        st.session_state.historical_error
+    )
+
+    # --------------------------------------------------------
+    # DISPLAY HISTORICAL DATA
+    # --------------------------------------------------------
+
+    if (
+        historical_df is not None
+        and not historical_df.empty
+    ):
+
+        st.success(
+            f"✅ {len(historical_df)} ThingSpeak readings loaded."
+        )
+
+        # ====================================================
+        # GRAPH 1 — KNEE ANGLE
+        # ====================================================
+
+        st.subheader(
+            "📈 Knee Angle vs Time"
+        )
+
+        angle_df = historical_df[
+            [
+                "Time",
+                "Knee Angle (°)"
+            ]
+        ].dropna(
+            subset=["Knee Angle (°)"]
+        )
+
+        if not angle_df.empty:
+
+            angle_df = angle_df.set_index(
+                "Time"
+            )
+
+            st.line_chart(
+                angle_df,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info(
+                "No knee-angle history available."
+            )
+
+        # ====================================================
+        # GRAPH 2 — FSR1 AND FSR2
+        # ====================================================
+
+        st.subheader(
+            "📊 FSR1 & FSR2 vs Time"
+        )
+
+        fsr_df = historical_df[
+            [
+                "Time",
+                "FSR1",
+                "FSR2"
+            ]
+        ].dropna(
+            how="all",
+            subset=[
+                "FSR1",
+                "FSR2"
+            ]
+        )
+
+        if not fsr_df.empty:
+
+            fsr_df = fsr_df.set_index(
+                "Time"
+            )
+
+            st.line_chart(
+                fsr_df,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info(
+                "No FSR historical data available."
+            )
+
+        # ====================================================
+        # GRAPH 3 — TOTAL LOAD
+        # ====================================================
+
+        st.subheader(
+            "⚖️ Total Load vs Time"
+        )
+
+        load_df = historical_df[
+            [
+                "Time",
+                "Total Load"
+            ]
+        ].dropna(
+            subset=["Total Load"]
+        )
+
+        if not load_df.empty:
+load_df = load_df.set_index(
+                "Time"
+            )
+
+            st.line_chart(
+                load_df,
+                use_container_width=True
+            )
+
+        else:
+
+            st.info(
+                "No total-load historical data available."
+            )
+
+        # ====================================================
+        # DATA SUMMARY
+        # ====================================================
+
+        st.divider()
+
+        st.subheader(
+            "📌 Sensor Data Summary"
+        )
+
+        summary_col1, summary_col2, summary_col3, summary_col4 = (
+            st.columns(4)
+        )
+
+        with summary_col1:
+
+            valid_angles = historical_df[
+                "Knee Angle (°)"
+            ].dropna()
+
+            if not valid_angles.empty:
+
+                st.metric(
+                    "Average Angle",
+                    f"{valid_angles.mean():.2f}°"
+                )
+
+            else:
+
+                st.metric(
+                    "Average Angle",
+                    "N/A"
+                )
+
+        with summary_col2:
+
+            if not valid_angles.empty:
+
+                st.metric(
+                    "Maximum Angle",
+                    f"{valid_angles.max():.2f}°"
+                )
+
+            else:
+
+                st.metric(
+                    "Maximum Angle",
+                    "N/A"
+                )
+
+        with summary_col3:
+
+            valid_fsr1 = historical_df[
+                "FSR1"
+            ].dropna()
+
+            if not valid_fsr1.empty:
+
+                st.metric(
+                    "Average FSR1",
+                    f"{valid_fsr1.mean():.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "Average FSR1",
+                    "N/A"
+                )
+
+        with summary_col4:
+
+            valid_load = historical_df[
+                "Total Load"
+            ].dropna()
+
+            if not valid_load.empty:
+
+                st.metric(
+                    "Average Total Load",
+                    f"{valid_load.mean():.2f}"
+                )
+
+            else:
+
+                st.metric(
+                    "Average Total Load",
+                    "N/A"
+                )
+
+        # ====================================================
+        # HISTORICAL SENSOR DATA TABLE
+        # ====================================================
+
+        st.divider()
+
+        st.subheader(
+            "📋 Historical Sensor Data"
+        )
+
+        display_df = historical_df.copy()
+
+        display_df["Time"] = display_df[
+            "Time"
+        ].dt.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # ====================================================
+        # DOWNLOAD CSV
+        # ====================================================
+
+        st.divider()
+
+        csv_data = historical_df.to_csv(
+            index=False
+        ).encode("utf-8")
+
+        st.download_button(
+            label="⬇️ Download Sensor History CSV",
+            data=csv_data,
+            file_name="oa_sense_ner_sensor_history.csv",
+            mime="text/csv"
         )
 
     else:
 
-        st.info(
-            "Upload an X-ray image to begin."
+        st.warning(
+            "⚠️ No historical ThingSpeak data available."
+        )
+
+        if historical_error:
+
+            st.info(
+                historical_error
+            )
+
+        st.write(
+            "Make sure the ESP32 is uploading data "
+            "to ThingSpeak."
+        )
+
+        st.write(
+            "Required ThingSpeak fields:"
+        )
+
+        st.write(
+            "• Field 1 → Knee Angle"
+        )
+
+        st.write(
+            "• Field 2 → FSR1"
+        )
+
+        st.write(
+            "• Field 3 → FSR2"
+        )
+
+        st.write(
+            "• Field 4 → Total Load"
+        )
+
+        st.write(
+            "• Field 5 → Status Code"
+        )
+
+        st.write(
+            "• Field 6 → Buzzer"
         )
 
 
@@ -988,161 +1075,60 @@ elif page == "📄 Reports":
 
     st.title("📄 Assessment Reports")
 
-    hardware_data, error = (
-        get_latest_hardware_data()
-    )
-
-    if hardware_data:
-
-        angle = hardware_data["knee_angle"]
-
-        report_data = {
-            "Parameter": [
-                "Patient",
-                "Knee Angle",
-                "Prototype Threshold",
-                "Status",
-                "ThingSpeak Channel",
-                "Timestamp"
-            ],
-            "Value": [
-                "Current Session",
-                f"{angle:.1f}°",
-                f"{HIGH_RISK_ANGLE:.0f}°",
-                (
-                    "Attention"
-                    if angle > HIGH_RISK_ANGLE
-                    else "Normal"
-                ),
-                THINGSPEAK_CHANNEL_ID,
-                hardware_data["timestamp"]
-            ]
-        }
-
-        st.subheader(
-            "Current Assessment Report"
-        )
-
-        st.dataframe(
-            pd.DataFrame(report_data),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        if angle > HIGH_RISK_ANGLE:
-
-            st.error(
-                "🚨 Prototype attention state"
-            )
-
-        else:
-
-            st.success(
-                "🟢 Prototype normal state"
-            )
-
-    else:
-
-        st.warning(
-            "Hardware data is unavailable."
-        )
-
-        st.caption(error)
-
-    st.divider()
-
-    st.subheader(
-        "Saved Patient Assessments"
-    )
-
-    if st.session_state.history:
-
-        st.dataframe(
-            pd.DataFrame(
-                st.session_state.history
-            ),
-            use_container_width=True,
-            hide_index=True
-        )
-
-    else:
+    if not st.session_state.history:
 
         st.info(
-            "No patient assessments saved."
+            "Complete at least one patient "
+            "assessment first."
         )
 
+    else:
 
-# ============================================================
-# NER INSIGHTS
-# ============================================================
-
-elif page == "🌎 NER Insights":
-
-    st.title(
-        "🌎 North Eastern Region Insights"
-    )
-
-    st.caption(
-        "Regional dashboard for prototype/demo data."
-    )
-
-    st.warning(
-        "Use only authorized, de-identified or synthetic "
-        "data unless appropriate permissions are available."
-    )
-
-    regions = [
-        "Assam",
-        "Arunachal Pradesh",
-        "Manipur",
-        "Meghalaya",
-        "Mizoram",
-        "Nagaland",
-        "Sikkim",
-        "Tripura"
-    ]
-
-    if st.session_state.history:
-
-        history_df = pd.DataFrame(
+        df = pd.DataFrame(
             st.session_state.history
         )
 
-        regional_counts = (
-            history_df["Region"]
-            .value_counts()
-            .reindex(
-                regions,
-                fill_value=0
-            )
+        st.dataframe(
+            df,
+            use_container_width=True
         )
 
-        st.bar_chart(
-            regional_counts
+        csv_data = df.to_csv(
+            index=False
+        ).encode("utf-8")
+
+        st.download_button(
+            label="⬇️ Download Assessment Report",
+            data=csv_data,
+            file_name="oa_sense_ner_assessment_report.csv",
+            mime="text/csv"
+        )
+
+
+# ============================================================
+# PATIENT HISTORY
+# ============================================================
+
+elif page == "📋 Patient History":
+
+    st.title("📋 Patient History")
+
+    if st.session_state.history:
+
+        df = pd.DataFrame(
+            st.session_state.history
+        )
+
+        st.dataframe(
+            df,
+            use_container_width=True
         )
 
     else:
 
         st.info(
-            "Add assessment records to display "
-            "regional analytics."
+            "No patient history available."
         )
-
-    st.divider()
-
-    st.subheader(
-        "Target Region"
-    )
-
-    cols = st.columns(4)
-
-    for i, region_name in enumerate(regions):
-
-        with cols[i % 4]:
-
-            st.info(
-                region_name
-            )
 
 
 # ============================================================
@@ -1151,78 +1137,71 @@ elif page == "🌎 NER Insights":
 
 elif page == "⚙️ Settings":
 
-    st.title("⚙️ System Settings")
+    st.title("⚙️ Settings")
 
-    st.subheader(
-        "Hardware Configuration"
-    )
-
-    settings_data = {
-        "Component": [
-            "Controller",
-            "Motion Sensor",
-            "Display",
-            "Buzzer",
-            "Cloud Platform"
-        ],
-        "Configuration": [
-            "ESP32-WROOM-32",
-            "MPU6050",
-            "OLED 128×64",
-            "GPIO 25",
-            "ThingSpeak"
-        ]
-    }
-
-    st.dataframe(
-        pd.DataFrame(settings_data),
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.divider()
-
-    st.subheader(
-        "ThingSpeak Configuration"
+    st.write(
+        "### 🔧 Hardware Configuration"
     )
 
     st.write(
-        f"Channel ID: **{THINGSPEAK_CHANNEL_ID}**"
+        "📡 ESP32-WROOM-32"
     )
 
     st.write(
-        "Data source: **Field 1 — Knee Angle**"
-    )
-
-    st.divider()
-
-    st.subheader(
-        "Prototype Threshold"
+        "🧭 MPU6500 — I2C Address 0x68"
     )
 
     st.write(
-        f"Current threshold: **{HIGH_RISK_ANGLE:.0f}°**"
+        "🖥️ OLED — 128 × 64 — I2C Address 0x3C"
     )
 
-    st.divider()
-
-    st.subheader(
-        "System Disclaimer"
+    st.write(
+        "📍 FSR1 — GPIO34"
     )
 
-    st.info(
-        "OA-SENSE NER is a research and prototype "
-        "system. Sensor measurements, thresholds and "
-        "future AI outputs should not be presented as "
-        "a standalone clinical diagnosis."
+    st.write(
+        "📍 FSR2 — GPIO35"
     )
 
-# ============================================================
-# FOOTER
-# ============================================================
+    st.write(
+        "🔔 Buzzer — GPIO25"
+    )
 
-st.sidebar.divider()
+    st.write(
+        f"☁️ ThingSpeak Channel ID: "
+        f"{THINGSPEAK_CHANNEL_ID}"
+    )
 
-st.sidebar.caption(
-    "OA-SENSE NER 2.0 | Prototype"
-)
+    st.write(
+        "📊 ThingSpeak Field 1 — Knee Angle"
+    )
+
+    st.write(
+        "📊 ThingSpeak Field 2 — FSR1"
+    )
+
+    st.write(
+        "📊 ThingSpeak Field 3 — FSR2"
+    )
+
+    st.write(
+        "📊 ThingSpeak Field 4 — Total Load"
+    )
+
+    st.write(
+        "📊 ThingSpeak Field 5 — Status Code"
+    )
+
+    st.write(
+        "📊 ThingSpeak Field 6 — Buzzer"
+    )
+
+    st.write(
+        f"⚠️ Prototype warning threshold: "
+        f"{HIGH_RISK_ANGLE:.0f}°"
+    )
+
+    st.warning(
+        "The threshold used in this prototype "
+        "is not a clinically validated diagnostic cutoff."
+    )
