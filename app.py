@@ -1718,7 +1718,7 @@ speech.lang = languageSelect.value;
 speech.rate = 0.9;
 speech.pitch = 1.0;
 
-speech.onend = function() {
+speech.onend = function() {{
     statusBox.innerHTML =
         "✅ Response generated and spoken.";
 };
