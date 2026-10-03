@@ -1731,45 +1731,78 @@ window.speechSynthesis.speak(speech);
     // SPEAK RESPONSE
     // -------------------------------------------------------
 
-    speakBtn.onclick = function() {{
+   speakBtn.onclick = function() {{
 
-        const text =
-            responseBox.innerText;
+    const text = responseBox.innerText.trim();
 
-        if (!text ||
-            text === "OA-SENSE NER response will appear here.") {{
+    if (!text ||
+        text === "OA-SENSE NER response will appear here.") {{
 
-            statusBox.innerHTML =
-                "🔊 Generate a response first.";
+        statusBox.innerHTML =
+            "🔊 Generate a response first.";
 
-            return;
-        }}
+        return;
+    }}
 
+    // Stop any previous speech
+    window.speechSynthesis.cancel();
 
-        window.speechSynthesis.cancel();
+    // Make sure speech engine is active
+    window.speechSynthesis.resume();
 
-        const speech =
-            new SpeechSynthesisUtterance(text);
+    const selectedLang = languageSelect.value;
 
-        speech.lang =
-            languageSelect.value;
+    const speech = new SpeechSynthesisUtterance(text);
 
-        speech.rate = 0.9;
-        speech.pitch = 1.0;
+    speech.lang = selectedLang;
+    speech.rate = 0.85;
+    speech.pitch = 1.0;
+    speech.volume = 1.0;
 
-        speech.onstart = function() {{
-            statusBox.innerHTML =
-                "🔊 Speaking response...";
-        }};
+    // Try to select a voice matching the selected language
+    let voices = window.speechSynthesis.getVoices();
 
-        speech.onend = function() {{
-            statusBox.innerHTML =
-                "✅ Response finished.";
-        }};
+    let matchingVoice = voices.find(function(voice) {{
+        return voice.lang.toLowerCase() ===
+               selectedLang.toLowerCase();
+    }});
 
-        window.speechSynthesis.speak(speech);
+    if (!matchingVoice) {{
+        matchingVoice = voices.find(function(voice) {{
+            return voice.lang
+                .toLowerCase()
+                .startsWith(
+                    selectedLang.substring(0, 2).toLowerCase()
+                );
+        }});
+    }}
 
+    if (matchingVoice) {{
+        speech.voice = matchingVoice;
+    }}
+
+    speech.onstart = function() {{
+        statusBox.innerHTML =
+            "🔊 Speaking response...";
     }};
+
+    speech.onend = function() {{
+        statusBox.innerHTML =
+            "✅ Response finished.";
+    }};
+
+    speech.onerror = function(event) {{
+        statusBox.innerHTML =
+            "⚠️ Voice error: " + event.error;
+    }};
+
+    // Start speech
+    window.speechSynthesis.speak(speech);
+}};
+// Load voices when the browser makes them available
+window.speechSynthesis.onvoiceschanged = function() {{
+    window.speechSynthesis.getVoices();
+}};
 
 
     // -------------------------------------------------------
