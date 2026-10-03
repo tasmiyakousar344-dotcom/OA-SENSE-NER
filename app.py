@@ -879,7 +879,7 @@ elif page == "📊 Analytics":
                 "Time"
             )
 
-            st.line_chart(
+           st.line_chart(
                 load_df,
                 use_container_width=True
             )
